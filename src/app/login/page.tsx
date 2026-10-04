@@ -71,22 +71,6 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* CENTER NAVIGATION LINKS */}
-        <nav className="hidden md:flex items-center gap-8 sm:gap-10 text-white/90 text-sm font-medium tracking-wide">
-          <a href="#" className="hover:text-pink-300 transition-colors drop-shadow-sm">
-            Home
-          </a>
-          <a href="#" className="hover:text-pink-300 transition-colors drop-shadow-sm">
-            Service
-          </a>
-          <a href="#" className="hover:text-pink-300 transition-colors drop-shadow-sm">
-            About
-          </a>
-          <a href="#" className="hover:text-pink-300 transition-colors drop-shadow-sm">
-            Contact
-          </a>
-        </nav>
-
         {/* RIGHT LOGIN OUTLINE PILL */}
         <div className="flex items-center gap-3">
           <button
