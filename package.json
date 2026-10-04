@@ -8,6 +8,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
+    "postinstall": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "node scripts/seed.mjs",
     "test:acceptance": "node scripts/test-acceptance.mjs"
