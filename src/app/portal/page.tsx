@@ -268,15 +268,28 @@ export default function ParticipantPortalPage() {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <div className="text-sm font-bold text-slate-900">
-                {currentProject?.myAlias || 'Assigned Participant'}
+                {currentProject?.myAlias || (currentUser?.role === 'ADMIN' ? 'Craftory Administrator' : 'Assigned Participant')}
               </div>
               <div className="text-xs text-slate-500 flex items-center justify-end gap-1.5">
                 <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-teal-50 text-[#088395] border border-teal-200">
                   {currentUser?.role}
                 </span>
-                <span className="text-slate-400">Identity Encrypted</span>
+                <span className="text-slate-400">
+                  {currentUser?.role === 'ADMIN' ? 'Full Oversight' : 'Identity Encrypted'}
+                </span>
               </div>
             </div>
+
+            {currentUser?.role === 'ADMIN' && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+                title="Go to Admin Oversight Console"
+              >
+                <Shield className="w-3.5 h-3.5 text-amber-600" />
+                <span>Admin Console</span>
+              </button>
+            )}
 
             <button
               onClick={handleLogout}

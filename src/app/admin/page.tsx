@@ -18,6 +18,11 @@ import {
   Database,
   Lock,
   X,
+  MessageSquare,
+  Send,
+  Check,
+  Ban,
+  Eye,
 } from 'lucide-react';
 
 interface Flag {
@@ -59,13 +64,21 @@ export default function AdminConsolePage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [adminTab, setAdminTab] = useState<'FLAGS' | 'PROJECTS' | 'RULES' | 'AUDIT'>('FLAGS');
+  const [adminTab, setAdminTab] = useState<'FLAGS' | 'CHATS' | 'PROJECTS' | 'RULES' | 'AUDIT'>('FLAGS');
   const [flags, setFlags] = useState<Flag[]>([]);
   const [flagFilter, setFlagFilter] = useState({ status: 'ALL', category: 'ALL' });
   const [projects, setProjects] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  // Live Project Chat State
+  const [selectedChatProjectId, setSelectedChatProjectId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatConversation, setChatConversation] = useState<any>(null);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const chatScrollRef = React.useRef<HTMLDivElement>(null);
 
   const [reviewNote, setReviewNote] = useState<{ [flagId: string]: string }>({});
   const [actionLoading, setActionLoading] = useState<{ [id: string]: boolean }>({});
@@ -86,7 +99,37 @@ export default function AdminConsolePage() {
     }
   }, [currentUser]);
 
-  // Periodic polling for flags and logs
+  // Set default chat project
+  useEffect(() => {
+    if (projects.length > 0 && !selectedChatProjectId) {
+      setSelectedChatProjectId(projects[0].id);
+    }
+  }, [projects, selectedChatProjectId]);
+
+  // Fetch chat messages when CHATS tab is open or project changes
+  useEffect(() => {
+    if (adminTab === 'CHATS' && selectedChatProjectId && projects.length > 0) {
+      const proj = projects.find((p) => p.id === selectedChatProjectId);
+      if (proj && proj.conversationId) {
+        fetchChatMessages(proj.conversationId);
+      }
+    }
+  }, [adminTab, selectedChatProjectId, projects]);
+
+  // Periodic polling for chat messages when on CHATS tab
+  useEffect(() => {
+    if (adminTab === 'CHATS' && selectedChatProjectId && projects.length > 0) {
+      const proj = projects.find((p) => p.id === selectedChatProjectId);
+      if (proj && proj.conversationId) {
+        const interval = setInterval(() => {
+          fetchChatMessages(proj.conversationId, true);
+        }, 3000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [adminTab, selectedChatProjectId, projects]);
+
+  // Periodic polling for flags
   useEffect(() => {
     if (currentUser?.role === 'ADMIN') {
       const interval = setInterval(() => {
@@ -148,6 +191,51 @@ export default function AdminConsolePage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchChatMessages = async (convId: string, background = false) => {
+    try {
+      const res = await fetch(`/api/conversations/${convId}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setChatConversation(data.conversation);
+        setChatMessages(data.messages);
+        if (!background && chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching chat messages for admin:', err);
+    }
+  };
+
+  const handleAdminSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatSending || !selectedChatProjectId) return;
+    const proj = projects.find((p) => p.id === selectedChatProjectId);
+    if (!proj || !proj.conversationId) return;
+
+    setChatSending(true);
+    const contentToSend = chatInput.trim();
+    setChatInput('');
+
+    try {
+      const res = await fetch(`/api/conversations/${proj.conversationId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: contentToSend,
+          clientTempId: `adm_${Date.now()}`,
+        }),
+      });
+      if (res.ok) {
+        fetchChatMessages(proj.conversationId);
+      }
+    } catch (err) {
+      console.error('Failed to send admin message:', err);
+    } finally {
+      setChatSending(false);
     }
   };
 
@@ -319,6 +407,15 @@ export default function AdminConsolePage() {
             </div>
 
             <button
+              onClick={() => router.push('/portal')}
+              className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-[#088395] border border-teal-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+              title="Open Client/Employee Chat Portal"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Participant Chat Portal</span>
+            </button>
+
+            <button
               onClick={handleLogout}
               className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
               title="Sign Out"
@@ -339,7 +436,7 @@ export default function AdminConsolePage() {
                 Governance & <span className="text-[#088395]">Moderation Console</span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Manage project access, review policy flags, inspect real identities, and maintain tamper-evident audit history.
+                Manage project access, review policy flags, supervise live conversations, and maintain tamper-evident audit history.
               </p>
             </div>
 
@@ -351,6 +448,15 @@ export default function AdminConsolePage() {
                 }`}
               >
                 Review Queue ({flags.filter((f) => f.status === 'PENDING').length})
+              </button>
+              <button
+                onClick={() => setAdminTab('CHATS')}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+                  adminTab === 'CHATS' ? 'bg-white text-[#088395] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Live Project Chats
               </button>
               <button
                 onClick={() => setAdminTab('PROJECTS')}
@@ -378,6 +484,264 @@ export default function AdminConsolePage() {
               </button>
             </div>
           </div>
+
+          {/* TAB: LIVE PROJECT CHATS (CONVERSATION INSPECTOR) */}
+          {adminTab === 'CHATS' && (
+            <div className="mt-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Live Stream Supervisor
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    — Confidential chat inspection with real identities unmasked for administrators
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const proj = projects.find((p) => p.id === selectedChatProjectId);
+                    if (proj?.conversationId) fetchChatMessages(proj.conversationId);
+                  }}
+                  className="text-xs font-semibold text-[#088395] hover:text-[#066d7c] flex items-center gap-1.5 transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Chat
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* PROJECT SELECTOR COLUMN */}
+                <div className="lg:col-span-4 space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1">
+                    Select Project Stream
+                  </div>
+                  {projects.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs">
+                      No active projects found.
+                    </div>
+                  ) : (
+                    projects.map((proj) => {
+                      const isSelected = proj.id === selectedChatProjectId;
+                      const activeMembers = proj.memberships || [];
+                      return (
+                        <div
+                          key={proj.id}
+                          onClick={() => setSelectedChatProjectId(proj.id)}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-teal-50/60 border-[#088395] shadow-sm ring-1 ring-[#088395]/20'
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-slate-100 text-slate-700 font-mono">
+                              {proj.code}
+                            </span>
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              {activeMembers.length} Participants
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-bold text-slate-900 line-clamp-1">{proj.name}</h3>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{proj.description}</p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* CONVERSATION STREAM COLUMN */}
+                <div className="lg:col-span-8 flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[560px]">
+                  {selectedChatProjectId ? (
+                    (() => {
+                      const activeProj = projects.find((p) => p.id === selectedChatProjectId);
+                      return (
+                        <>
+                          <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-teal-100 text-[#088395] font-mono">
+                                  {activeProj?.code}
+                                </span>
+                                <h2 className="text-base font-extrabold text-slate-900">
+                                  {activeProj?.name}
+                                </h2>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-1">
+                                {chatConversation?.title || 'Confidential Project Stream'}
+                              </div>
+                            </div>
+
+                            {/* PARTICIPANTS PILLS (With real identities revealed for admin) */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {activeProj?.memberships?.map((m: any) => (
+                                <span
+                                  key={m.id}
+                                  className="px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white border border-slate-200 text-slate-700 shadow-2xs flex items-center gap-1"
+                                  title={`Real identity: ${m.user?.realName} (${m.user?.email})`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${m.role === 'CLIENT' ? 'bg-indigo-500' : 'bg-teal-500'}`}></span>
+                                  <span className="font-bold">{m.alias}</span>
+                                  <span className="text-[10px] text-slate-400">({m.user?.realName})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* MANDATORY PRIVACY BANNER */}
+                          <div className="bg-slate-100/70 border-b border-slate-200/60 px-4 py-2 text-[11px] text-slate-600 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 font-medium">
+                              <Shield className="w-3.5 h-3.5 text-[#088395]" />
+                              {chatConversation?.privacyNotice ||
+                                'Craftory Studio administrators may review conversations for project management and compliance.'}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                              Admin Full Access
+                            </span>
+                          </div>
+
+                          {/* MESSAGE LIST SCROLL CONTAINER */}
+                          <div
+                            ref={chatScrollRef}
+                            className="flex-1 p-5 overflow-y-auto space-y-4 max-h-[420px] bg-slate-50/30"
+                          >
+                            {chatMessages.length === 0 ? (
+                              <div className="text-center py-16 text-slate-400">
+                                <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                <div className="text-xs font-semibold text-slate-600">No messages in this stream yet.</div>
+                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                  You can post an administrative notice below.
+                                </div>
+                              </div>
+                            ) : (
+                              chatMessages.map((msg: any) => {
+                                const isAdminSender = msg.senderRole === 'ADMIN' || msg.senderAlias === 'Craftory Administrator';
+                                const isHeld = msg.status === 'HELD_FOR_REVIEW';
+                                const isRejected = msg.status === 'REJECTED';
+
+                                return (
+                                  <div
+                                    key={msg.id}
+                                    className={`p-4 rounded-2xl border transition-all ${
+                                      isHeld
+                                        ? 'bg-amber-50/50 border-amber-200'
+                                        : isRejected
+                                        ? 'bg-rose-50/40 border-rose-200'
+                                        : isAdminSender
+                                        ? 'bg-teal-50/50 border-teal-200'
+                                        : 'bg-white border-slate-200/80 shadow-2xs'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className={`text-xs font-extrabold ${
+                                          isAdminSender
+                                            ? 'text-[#088395]'
+                                            : msg.senderRole === 'CLIENT'
+                                            ? 'text-indigo-600'
+                                            : 'text-teal-700'
+                                        }`}>
+                                          {msg.senderAlias}
+                                        </span>
+
+                                        {/* ADMIN PRIVILEGE: Real identity badge */}
+                                        {msg.senderRealName && (
+                                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                            <Eye className="w-2.5 h-2.5 text-slate-400" />
+                                            <span>Real: {msg.senderRealName}</span>
+                                            {msg.senderEmail && <span className="text-slate-400">({msg.senderEmail})</span>}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        {/* STATUS BADGES */}
+                                        {msg.status === 'DELIVERED' && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                            <Check className="w-2.5 h-2.5" /> Delivered
+                                          </span>
+                                        )}
+                                        {isHeld && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                                            <AlertTriangle className="w-2.5 h-2.5" /> Held for Review
+                                          </span>
+                                        )}
+                                        {isRejected && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                                            <Ban className="w-2.5 h-2.5" /> Rejected
+                                          </span>
+                                        )}
+                                        <span className="text-[11px] text-slate-400">
+                                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* MESSAGE CONTENT */}
+                                    <p className="text-xs sm:text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                      {msg.content}
+                                    </p>
+
+                                    {/* REJECTION REASON (IF REJECTED) */}
+                                    {isRejected && msg.rejectionReason && (
+                                      <div className="mt-2 text-[11px] text-rose-600 font-medium bg-rose-50 p-2 rounded-xl border border-rose-100">
+                                        Rejection note: {msg.rejectionReason}
+                                      </div>
+                                    )}
+
+                                    {/* INLINE ADMIN MODERATION SHORTCUT (IF HELD) */}
+                                    {isHeld && (
+                                      <div className="mt-3 pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
+                                        <span className="text-amber-700 text-[11px] font-medium">
+                                          Pre-delivery moderation held this message.
+                                        </span>
+                                        <button
+                                          onClick={() => setAdminTab('FLAGS')}
+                                          className="text-[11px] font-bold text-[#088395] hover:underline flex items-center gap-1"
+                                        >
+                                          Open in Review Queue <ExternalLink className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* ADMIN MESSAGE COMPOSER */}
+                          <form
+                            onSubmit={handleAdminSendMessage}
+                            className="p-3 sm:p-4 border-t border-slate-100 bg-white flex items-center gap-2"
+                          >
+                            <input
+                              type="text"
+                              value={chatInput}
+                              onChange={(e) => setChatInput(e.target.value)}
+                              placeholder="Post official administrative notice or message to this project stream..."
+                              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#088395] focus:border-transparent transition bg-slate-50/50"
+                              disabled={chatSending}
+                            />
+                            <button
+                              type="submit"
+                              disabled={chatSending || !chatInput.trim()}
+                              className="px-4 py-2.5 rounded-xl bg-[#088395] hover:bg-[#066d7c] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm disabled:opacity-50"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Send Notice</span>
+                            </button>
+                          </form>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <div className="p-16 text-center text-slate-400">
+                      Select a project from the left to view conversation.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TAB 1: FLAG REVIEW QUEUE */}
           {adminTab === 'FLAGS' && (

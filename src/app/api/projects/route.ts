@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   if (user.role === 'ADMIN') {
     // Admin gets full project view with memberships & real identities
-    const projects = await prisma.project.findMany({
+    const rawProjects = await prisma.project.findMany({
       include: {
         conversations: { select: { id: true, title: true } },
         memberships: {
@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    const projects = rawProjects.map((p) => ({
+      ...p,
+      conversationId: p.conversations[0]?.id || null,
+    }));
 
     return NextResponse.json({ projects });
   }
