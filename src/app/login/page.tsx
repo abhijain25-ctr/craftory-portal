@@ -61,16 +61,8 @@ export default function LoginPage() {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      {/* 1. TOP SYNTHWAVE NAVIGATION BAR (Matching 1st Screenshot) */}
-      <header className="w-full px-6 sm:px-12 py-6 flex items-center justify-between z-20">
-        {/* BRAND LOGO */}
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/')}>
-          <span className="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#ffffff]"></span>
-          <span className="text-xl sm:text-2xl font-black text-white tracking-widest uppercase drop-shadow-[0_2px_10px_rgba(255,255,255,0.4)]">
-            LOCO
-          </span>
-        </div>
-
+      {/* 1. TOP SYNTHWAVE HEADER */}
+      <header className="w-full px-6 sm:px-12 py-6 flex items-center justify-end z-20">
         {/* RIGHT LOGIN OUTLINE PILL */}
         <div className="flex items-center gap-3">
           <button
